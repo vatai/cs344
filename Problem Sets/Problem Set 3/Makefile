@@ -17,7 +17,8 @@ OPENCV_INCLUDEPATH=/usr/include
 
 OPENCV_LIBS=-lopencv_core -lopencv_imgproc -lopencv_highgui
 
-CUDA_INCLUDEPATH=/usr/local/cuda-7.0/include
+CUDA_INCLUDEPATH=/opt/cuda/include
+CUDA_LIBPATH=/opt/cuda/lib
 
 ######################################################
 # On Macs the default install locations are below    #
