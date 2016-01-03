@@ -79,6 +79,7 @@
   steps.
 
 */
+
 #include <algorithm>
 
 #include "utils.h"
@@ -306,6 +307,7 @@ __global__ void cdf(unsigned int* d_cdf, const size_t n){
   if( tid > n ) return;
 
   for( unsigned int s = 1; s <= n/2; s <<= 1 ){
+    
     unsigned int t = tid >= s ? d_cdf[tid] + d_cdf[tid-s] : d_cdf[tid];
     //if( tid >= s ) d_cdf[tid] = d_cdf[tid] + d_cdf[tid-s];
     __syncthreads();
@@ -333,87 +335,25 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
   float *d_max_out,*d_min_out;
   checkCudaErrors(cudaMalloc(&d_max_out,numCols*numRows*sizeof(float)));
   checkCudaErrors(cudaMalloc(&d_min_out,numCols*numRows*sizeof(float)));
-  /*
-#define calcMax calcMax5
-  calcMax<<<gridSize/2,blockSize,blockSize*sizeof(float)>>>
-    (d_max_out,d_logLuminance,numRows*numCols);
-  cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
-  // check_d_mem(d_max_out,numCols*numRows,0);
 
-  calcMax<<<1,gridSize/2,blockSize*sizeof(float)>>>
-    (d_max_out,d_max_out,numRows*numCols);
-  cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
-  // check_d_mem(d_max_out,numCols*numRows,0);
-  */
-
+  // min max stage 1
   calcMinMax<<<gridSize/2,blockSize,blockSize*sizeof(float)>>>
     (d_min_out,d_max_out,d_logLuminance,d_logLuminance,numRows*numCols);
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
 
+  // min max stage 2
   calcMinMax<<<1,gridSize/2,blockSize*sizeof(float)>>>
     (d_min_out,d_max_out,d_min_out,d_max_out,numRows*numCols);
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
-  
-  //float maxLogLum,minLogLum;
+
+  // get min max
   checkCudaErrors(cudaMemcpy(&max_logLum, d_max_out, sizeof(float), cudaMemcpyDeviceToHost));
   checkCudaErrors(cudaMemcpy(&min_logLum, d_min_out, sizeof(float), cudaMemcpyDeviceToHost));
   
-  std::cout << "---> HI <---" << std::endl;
-  std::cout << "MAX: " << max_logLum << std::endl;
-  std::cout << "MIN: " << min_logLum << std::endl;
- 
-  // std::cout << std::min_element(h_logLuminance, h_logLuminance+numCols*numRows);
-  std::cout << std::endl;
-  //// logLumMax = std::max(h_logLuminance[i], logLumMax);
-
-  /*
-    //Step 2 
-    2) subtract them to find the range
-  */
   float log_lumRange = max_logLum - min_logLum;
-  std::cout << "DIFF: " << log_lumRange << std::endl;
 
-  /////// WTF IS THIS???? ////
-  // logLumRange+=1.;
-  // logLumRange-=1.;
-  // N = (size_t)d_cdf;
-  // N= numBins;
-
-  /*const float* const d_logLuminance,
-    unsigned int* const d_cdf,
-    float &min_logLum,
-    float &max_logLum,
-    const size_t numRows,
-    const size_t numCols,
-    const size_t numBins
-    3) generate a histogram of all the values in the logLuminance channel using
-    the formula: bin = (lum[i] - lumMin) / lumRange * numBins 
-  */
-
-  //Step 3
-  //next we use the now known range to compute
-  //a histogram of numBins bins
+  cudaMemset(d_cdf, 0, numBins*sizeof(unsigned int));
   
-  ////// HOST CODE ///////
-  //*
-  float *data = new float[numRows*numCols];
-  cudaMemcpy( data, d_logLuminance, sizeof(float)*numRows*numCols,
-	      cudaMemcpyDeviceToHost);
-  float h_max = *std::max_element(data, data+numRows*numCols);
-  float h_min = *std::min_element(data, data+numRows*numCols);
-
-  std::cout << "h_min: " << h_min << std::endl
-	    << "h_max: " << h_max << std::endl;
-
-  unsigned int i = 0;
-  unsigned int* h_cdf = new unsigned int[numBins];
-  for(i=0; i < numBins; i++) h_cdf[i] = 0;
-  
-  for(i=0; i < numRows*numCols; i++){
-    unsigned int bin = ((data[i] - min_logLum) / log_lumRange * numBins );
-    h_cdf[bin]++;
-  }
-
   histo<<<gridSize,blockSize>>>
     (d_logLuminance,
      d_cdf,
@@ -421,40 +361,8 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
      numBins, numRows*numCols);
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
 
-  for(i=0; i<numBins; i++){
-    unsigned int t;
-    cudaMemcpy(&t, d_cdf+i, sizeof(unsigned int), cudaMemcpyDeviceToHost);
-    if( h_cdf[i] != t) std::cout << "bad histo: "
-				 << "i: " << i << "; " 
-				 << "h_cdf[i]: " << h_cdf[i] << "; "
-				 << "d_cdf[i]: " << t << ";"
-				 << std::endl;
-  }
-
-  /*
-    4) Perform an exclusive scan (prefix sum) on the histogram to get
-       the cumulative distribution of luminance values (this should go in the
-       incoming d_cdf pointer which already has been allocated for you)       */
-  //Step 4
-  //finally we perform and exclusive scan (prefix sum)
-  //on the histogram to get the cumulative distribution
-  // delete[] data;
-  int acc = 0;
-  for( i = 0; i < numBins; i++ ){
-    acc += h_cdf[i];
-    h_cdf[i] = acc;
-  }
 
   cdf<<< 1, numBins >>>( d_cdf, numBins );
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
 
-  for(i=0; i<numBins; i++){
-    unsigned int t; 
-    cudaMemcpy(&t, d_cdf+i, sizeof(unsigned int), cudaMemcpyDeviceToHost);
-    if( h_cdf[i] != t) std::cout << "bad cdf: "
-				 << "i: " << i << "; " 
-				 << "h_cdf[i]: " << h_cdf[i] << "; "
-				 << "d_cdf[i]: " << t << ";"
-				 << std::endl;
-  }
 }
