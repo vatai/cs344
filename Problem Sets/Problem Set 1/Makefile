@@ -20,7 +20,7 @@ OPENCV_INCLUDEPATH=/usr/include
 #OPENCV_LIBPATH=/opt/local/lib
 #OPENCV_INCLUDEPATH=/opt/local/include
 
-OPENCV_LIBS=-lopencv_core -lopencv_imgproc -lopencv_highgui
+OPENCV_LIBS=-lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_imgcodecs
 
 CUDA_INCLUDEPATH=/opt/cuda/include
 CUDA_LIBPATH=/opt/cuda/lib

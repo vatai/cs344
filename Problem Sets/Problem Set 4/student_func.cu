@@ -42,6 +42,11 @@
 
  */
 
+__global__ void sort(){
+  extern __shared__ unsigned int *sdata;
+  unsigned int *data; data = (unsigned int*) sdata;
+}
+
 
 void your_sort(unsigned int* const d_inputVals,
                unsigned int* const d_inputPos,
@@ -51,4 +56,5 @@ void your_sort(unsigned int* const d_inputVals,
 { 
   //TODO
   //PUT YOUR SORT HERE
+  
 }
